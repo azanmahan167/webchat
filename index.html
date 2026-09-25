@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A&M WhatsApp Clone | Working Call System</title>
+    <title>A&M WhatsApp Clone | AI Assistant & Rooster Calls</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -34,6 +34,31 @@
         </div>
     </div>
 
+    <!-- AI Guide / Assistant Chat Modal -->
+    <div id="aiGuideModal" class="fixed inset-0 bg-black/70 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full h-[85vh] shadow-2xl flex flex-col overflow-hidden">
+            <div class="bg-[#00a884] px-4 py-3 flex justify-between items-center text-white">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🤖</span>
+                    <div>
+                        <h2 class="font-bold text-sm">A&M AI Assistant</h2>
+                        <p class="text-[10px] text-emerald-200">Online | Sab kuch poochhein</p>
+                    </div>
+                </div>
+                <button onclick="closeAiGuide()" class="text-white font-bold text-lg">✕</button>
+            </div>
+            <div id="aiChatMessages" class="flex-1 p-4 overflow-y-auto space-y-3 bg-[#efeae2]">
+                <div class="bg-white p-3 rounded-xl max-w-[80%] text-xs shadow-sm">
+                    Salam! Main A&M AI Assistant hoon. Aapko is app ke bare mein kya janna hai? Jaise contact kaise add karein, group kaise banayein, ya call kaise karein? Mujhse poochhein! 🚀
+                </div>
+            </div>
+            <div class="p-3 bg-[#f0f2f5] flex items-center space-x-2 border-t">
+                <input type="text" id="aiInput" onkeypress="handleAiKeyPress(event)" placeholder="AI se kuch poochhein..." class="flex-1 px-4 py-2 bg-white rounded-lg text-xs focus:outline-none">
+                <button onclick="sendAiMessage()" class="bg-[#00a884] text-white px-4 py-2 rounded-lg font-bold text-xs">Send 📤</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Incoming Call Overlay Popup -->
     <div id="incomingCallModal" class="fixed inset-0 bg-black/80 z-[100] hidden flex flex-col items-center justify-center space-y-6">
         <div class="w-28 h-28 rounded-full border-4 border-emerald-500 overflow-hidden animate-pulse">
@@ -49,19 +74,25 @@
         </div>
     </div>
 
-    <!-- Live Connected Call Screen -->
+    <!-- Live Connected Voice Call Screen -->
     <div id="activeCallScreen" class="fixed inset-0 bg-gray-900 z-[110] hidden flex flex-col justify-between p-6">
         <div class="flex justify-between items-center text-white">
-            <h3 id="liveCallTitle" class="text-lg font-bold">Live Call Active 🟢</h3>
+            <h3 class="text-lg font-bold">Live Voice Call Active 🟢</h3>
             <button onclick="endLiveCall()" class="bg-red-600 px-4 py-2 rounded-xl text-xs font-bold">Disconnect ❌</button>
         </div>
-        <div class="flex-1 flex flex-col items-center justify-center text-white space-y-4">
-            <div class="w-32 h-32 rounded-full border-4 border-emerald-500 overflow-hidden animate-bounce">
+        <div class="flex-1 flex flex-col items-center justify-center text-white space-y-6">
+            <div class="w-36 h-36 rounded-full border-4 border-emerald-500 overflow-hidden animate-bounce shadow-2xl">
                 <img id="activeCallDp" src="https://via.placeholder.com/150" class="w-full h-full object-cover">
             </div>
-            <h2 id="activeCallUsername" class="text-xl font-bold">Baat ho rahi hai...</h2>
-            <p class="text-xs text-gray-400">Mic on hai, aap bol sakte hain!</p>
-            <audio id="liveAudio" autoplay></audio>
+            <h2 id="activeCallUsername" class="text-xl font-bold">Baat Cheet Jari Hai...</h2>
+            <p class="text-xs text-emerald-400">Mic on hai, bolne ke liye button dabayein rakhein!</p>
+            
+            <div class="flex items-center space-x-4">
+                <button onmousedown="startSpeaking()" onmouseup="stopSpeaking()" ontouchstart="startSpeaking()" ontouchend="stopSpeaking()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-full font-bold text-sm shadow-lg transition">
+                    🎤 Bolne ke liye dabayein (Hold to Speak)
+                </button>
+            </div>
+            <audio id="liveAudioPlayer" autoplay></audio>
         </div>
     </div>
 
@@ -75,9 +106,10 @@
                     <img id="myProfilePic" src="https://via.placeholder.com/150" class="w-10 h-10 rounded-full object-cover">
                     <span id="myProfileName" class="font-bold text-sm text-gray-800">User</span>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <button onclick="openAddContactModal()" class="bg-gray-200 hover:bg-gray-300 px-2.5 py-1.5 rounded-lg text-xs font-bold">👤+ Add</button>
-                    <button onclick="openGroupModal()" class="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1.5 rounded-lg text-xs font-bold">👥 Group</button>
+                <div class="flex items-center space-x-1">
+                    <button onclick="openAiGuide()" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-1.5 rounded-lg text-xs font-bold">🤖 AI Help</button>
+                    <button onclick="openAddContactModal()" class="bg-gray-200 hover:bg-gray-300 px-2 py-1.5 rounded-lg text-xs font-bold">👤+</button>
+                    <button onclick="openGroupModal()" class="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2 py-1.5 rounded-lg text-xs font-bold">👥</button>
                 </div>
             </div>
 
@@ -169,7 +201,8 @@
 
         let activeCallDocId = null;
         let roosterInterval = null;
-        let localAudioStream = null;
+        let callMediaRecorder = null;
+        let callAudioChunks = [];
 
         window.onload = function() {
             if (!myName || !myPhone) {
@@ -244,6 +277,41 @@
         }
 
         function openProfileModal() { document.getElementById('profileModal').classList.remove('hidden'); }
+        function openAiGuide() { document.getElementById('aiGuideModal').classList.remove('hidden'); }
+        function closeAiGuide() { document.getElementById('aiGuideModal').classList.add('hidden'); }
+
+        // AI Assistant Chat Logic
+        function handleAiKeyPress(e) { if(e.key === 'Enter') sendAiMessage(); }
+
+        function sendAiMessage() {
+            let input = document.getElementById('aiInput');
+            let query = input.value.trim().toLowerCase();
+            if(!query) return;
+
+            let chatBox = document.getElementById('aiChatMessages');
+            chatBox.innerHTML += `<div class="bg-[#d9fdd3] p-3 rounded-xl max-w-[80%] ml-auto text-xs shadow-sm"><b>Aap:</b> ${input.value}</div>`;
+            let userQ = input.value;
+            input.value = '';
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // AI Reply Generator
+            setTimeout(() => {
+                let reply = "Mujhe samajh nahi aaya. Aap pooch sakte hain: 'Contact kaise add karein?', 'Group kaise banayein?', ya 'Call kaise karein?'";
+                
+                if(query.includes('contact') || query.includes('number') || query.includes('dost')) {
+                    reply = "Contact add karne ke liye upar 👤+ Add button par click karein aur apne dost ka 11-digits ka registered phone number likhein. Chat foran shuru ho jayegi!";
+                } else if(query.includes('group') || query.includes('chat')) {
+                    reply = "Group banane ke liye 👥 button dabayein, group ka naam likhein, apne dosto ko select karein aur Done par click karein!";
+                } else if(query.includes('call') || query.includes('morga') || query.includes('rooster')|| query.includes('awaz')) {
+                    reply = "Call karne ke liye chat khol kar 📞 ya 🎥 button dabayein. Samne wale ke paas Morga (Rooster) ki awaz ringtone bajegi. Jaise hi wo Accept dabayega, awaz band ho jayegi aur aap live baat kar sakenge!";
+                } else if(query.includes('profile') || query.includes('naam') || query.includes('dp')) {
+                    reply = "Apni profile dekhne ya badalne ke liye upar apni DP ya naam par click karein!";
+                }
+
+                chatBox.innerHTML += `<div class="bg-white p-3 rounded-xl max-w-[80%] text-xs shadow-sm"><b>🤖 A&M AI:</b> ${reply}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 600);
+        }
 
         function verifyAndAddContact() {
             let phone = document.getElementById('contactPhoneInput').value.trim();
@@ -458,7 +526,7 @@
             }
         }
 
-        // Reliable Call System Trigger
+        // Call System Trigger with Rooster Ringtone
         function triggerCall(type) {
             if(!currentRoomId) { alert("Pehle koi chat select karein!"); return; }
             
@@ -473,11 +541,11 @@
                 activeCallDocId = `${currentRoomId}/calls/${docRef.id}`;
                 alert("Call bhej di gayi hai! Samne wale ke paas ringtone baj rahi hai.");
                 
-                // Listen if call accepted or rejected
                 db.doc(activeCallDocId).onSnapshot(snap => {
                     let data = snap.data();
                     if(data && data.status === "accepted") {
-                        startLiveAudioStream();
+                        document.getElementById('activeCallScreen').classList.remove('hidden');
+                        document.getElementById('activeCallDp').src = myDp;
                     } else if(data && data.status === "rejected") {
                         alert("Call reject kar di gayi.");
                         endLiveCall();
@@ -527,47 +595,23 @@
             }
         }
 
-        async function acceptCall() {
-            stopRoosterLoop();
+        function acceptCall() {
+            stopRoosterLoop(); // Awaz foran band ho jayegi!
             document.getElementById('incomingCallModal').classList.add('hidden');
+            document.getElementById('activeCallScreen').classList.remove('hidden');
+            document.getElementById('activeCallDp').src = document.getElementById('callerDp').src;
             
             if(activeCallDocId) {
                 db.doc(activeCallDocId).update({ status: "accepted" });
-            }
-            startLiveAudioStream();
-        }
-
-        async function startLiveAudioStream() {
-            try {
-                localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                document.getElementById('activeCallScreen').classList.remove('hidden');
-                document.getElementById('activeCallUsername').innerText = "Live Baat Cheet Jari Hai!";
                 
-                // Optional: Stream audio chunks via Firestore storage if needed, or active mic stream active session
-                let mediaRecorderLive = new MediaRecorder(localAudioStream);
-                mediaRecorderLive.start(1000);
-                mediaRecorderLive.ondataavailable = e => {
-                    if(e.data.size > 0 && activeCallDocId) {
-                        let reader = new FileReader();
-                        reader.readAsDataURL(e.data);
-                        reader.onloadend = function() {
-                            db.doc(activeCallDocId).update({ audioChunk: reader.result }).catch(()=>{});
-                        }
-                    }
-                };
-
-                // Listen for incoming audio chunks from other user
                 db.doc(activeCallDocId).onSnapshot(snap => {
                     let d = snap.data();
-                    if(d && d.audioChunk && d.lastSender !== myPhone) {
-                        let audioElem = document.getElementById('liveAudio');
-                        audioElem.src = d.audioChunk;
-                        audioElem.play().catch(()=>{});
+                    if(d && d.audioData && d.senderPhone !== myPhone) {
+                        let audioPlayer = document.getElementById('liveAudioPlayer');
+                        audioPlayer.src = d.audioData;
+                        audioPlayer.play().catch(()=>{});
                     }
                 });
-
-            } catch(err) {
-                alert("Microphone permission zaroori hai live baat karne ke liye!");
             }
         }
 
@@ -579,11 +623,38 @@
             }
         }
 
+        function startSpeaking() {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                callMediaRecorder = new MediaRecorder(stream);
+                callAudioChunks = [];
+                callMediaRecorder.start();
+                callMediaRecorder.ondataavailable = e => callAudioChunks.push(e.data);
+                callMediaRecorder.onstop = () => {
+                    let blob = new Blob(callAudioChunks, { type: 'audio/webm' });
+                    let reader = new FileReader();
+                    reader.readAsDataURL(blob);
+                    reader.onloadend = function() {
+                        if(activeCallDocId) {
+                            db.doc(activeCallDocId).update({
+                                audioData: reader.result,
+                                senderPhone: myPhone
+                            }).catch(()=>{});
+                        }
+                    }
+                };
+            }).catch(() => {
+                alert("Microphone ki permission zaroori hai!");
+            });
+        }
+
+        function stopSpeaking() {
+            if(callMediaRecorder && callMediaRecorder.state !== "inactive") {
+                callMediaRecorder.stop();
+            }
+        }
+
         function endLiveCall() {
             stopRoosterLoop();
-            if (localAudioStream) {
-                localAudioStream.getTracks().forEach(track => track.stop());
-            }
             document.getElementById('activeCallScreen').classList.add('hidden');
             document.getElementById('incomingCallModal').classList.add('hidden');
             if (activeCallDocId) {
