@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A&M WhatsApp Clone | AI Assistant & Rooster Calls</title>
+    <title>A&M WhatsApp Clone | Direct Live Voice Call</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -74,25 +74,19 @@
         </div>
     </div>
 
-    <!-- Live Connected Voice Call Screen -->
+    <!-- Direct Live Voice Call Screen -->
     <div id="activeCallScreen" class="fixed inset-0 bg-gray-900 z-[110] hidden flex flex-col justify-between p-6">
         <div class="flex justify-between items-center text-white">
-            <h3 class="text-lg font-bold">Live Voice Call Active 🟢</h3>
+            <h3 class="text-lg font-bold">Direct Live Call Active 🟢</h3>
             <button onclick="endLiveCall()" class="bg-red-600 px-4 py-2 rounded-xl text-xs font-bold">Disconnect ❌</button>
         </div>
         <div class="flex-1 flex flex-col items-center justify-center text-white space-y-6">
             <div class="w-36 h-36 rounded-full border-4 border-emerald-500 overflow-hidden animate-bounce shadow-2xl">
                 <img id="activeCallDp" src="https://via.placeholder.com/150" class="w-full h-full object-cover">
             </div>
-            <h2 id="activeCallUsername" class="text-xl font-bold">Baat Cheet Jari Hai...</h2>
-            <p class="text-xs text-emerald-400">Mic on hai, bolne ke liye button dabayein rakhein!</p>
-            
-            <div class="flex items-center space-x-4">
-                <button onmousedown="startSpeaking()" onmouseup="stopSpeaking()" ontouchstart="startSpeaking()" ontouchend="stopSpeaking()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-full font-bold text-sm shadow-lg transition">
-                    🎤 Bolne ke liye dabayein (Hold to Speak)
-                </button>
-            </div>
-            <audio id="liveAudioPlayer" autoplay></audio>
+            <h2 id="activeCallUsername" class="text-xl font-bold">Live Baat Cheet Jari Hai...</h2>
+            <p class="text-xs text-emerald-400 animate-pulse">Mic khula hai, aap direct bol sakte hain!</p>
+            <audio id="remoteAudioPlayer" autoplay></audio>
         </div>
     </div>
 
@@ -201,8 +195,8 @@
 
         let activeCallDocId = null;
         let roosterInterval = null;
-        let callMediaRecorder = null;
-        let callAudioChunks = [];
+        let continuousRecorder = null;
+        let localMicStream = null;
 
         window.onload = function() {
             if (!myName || !myPhone) {
@@ -280,7 +274,6 @@
         function openAiGuide() { document.getElementById('aiGuideModal').classList.remove('hidden'); }
         function closeAiGuide() { document.getElementById('aiGuideModal').classList.add('hidden'); }
 
-        // AI Assistant Chat Logic
         function handleAiKeyPress(e) { if(e.key === 'Enter') sendAiMessage(); }
 
         function sendAiMessage() {
@@ -290,11 +283,9 @@
 
             let chatBox = document.getElementById('aiChatMessages');
             chatBox.innerHTML += `<div class="bg-[#d9fdd3] p-3 rounded-xl max-w-[80%] ml-auto text-xs shadow-sm"><b>Aap:</b> ${input.value}</div>`;
-            let userQ = input.value;
             input.value = '';
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            // AI Reply Generator
             setTimeout(() => {
                 let reply = "Mujhe samajh nahi aaya. Aap pooch sakte hain: 'Contact kaise add karein?', 'Group kaise banayein?', ya 'Call kaise karein?'";
                 
@@ -303,7 +294,7 @@
                 } else if(query.includes('group') || query.includes('chat')) {
                     reply = "Group banane ke liye 👥 button dabayein, group ka naam likhein, apne dosto ko select karein aur Done par click karein!";
                 } else if(query.includes('call') || query.includes('morga') || query.includes('rooster')|| query.includes('awaz')) {
-                    reply = "Call karne ke liye chat khol kar 📞 ya 🎥 button dabayein. Samne wale ke paas Morga (Rooster) ki awaz ringtone bajegi. Jaise hi wo Accept dabayega, awaz band ho jayegi aur aap live baat kar sakenge!";
+                    reply = "Call karne ke liye chat khol kar 📞 ya 🎥 button dabayein. Samne wale ke paas Morga (Rooster) ki awaz ringtone bajegi. Jaise hi wo Accept dabayega, awaz foran band ho jayegi aur aap direct live baat kar sakenge!";
                 } else if(query.includes('profile') || query.includes('naam') || query.includes('dp')) {
                     reply = "Apni profile dekhne ya badalne ke liye upar apni DP ya naam par click karein!";
                 }
@@ -526,7 +517,7 @@
             }
         }
 
-        // Call System Trigger with Rooster Ringtone
+        // Direct Call System Trigger with Rooster Ringtone
         function triggerCall(type) {
             if(!currentRoomId) { alert("Pehle koi chat select karein!"); return; }
             
@@ -544,8 +535,7 @@
                 db.doc(activeCallDocId).onSnapshot(snap => {
                     let data = snap.data();
                     if(data && data.status === "accepted") {
-                        document.getElementById('activeCallScreen').classList.remove('hidden');
-                        document.getElementById('activeCallDp').src = myDp;
+                        startDirectAudioStream();
                     } else if(data && data.status === "rejected") {
                         alert("Call reject kar di gayi.");
                         endLiveCall();
@@ -596,20 +586,54 @@
         }
 
         function acceptCall() {
-            stopRoosterLoop(); // Awaz foran band ho jayegi!
+            stopRoosterLoop(); // Awaz fauran band ho jayegi!
             document.getElementById('incomingCallModal').classList.add('hidden');
-            document.getElementById('activeCallScreen').classList.remove('hidden');
-            document.getElementById('activeCallDp').src = document.getElementById('callerDp').src;
             
             if(activeCallDocId) {
                 db.doc(activeCallDocId).update({ status: "accepted" });
+            }
+            startDirectAudioStream();
+        }
+
+        function startDirectAudioStream() {
+            document.getElementById('activeCallScreen').classList.remove('hidden');
+            document.getElementById('activeCallDp').src = document.getElementById('callerDp').src || myDp;
+
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                localMicStream = stream;
+                continuousRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 
-                db.doc(activeCallDocId).onSnapshot(snap => {
-                    let d = snap.data();
-                    if(d && d.audioData && d.senderPhone !== myPhone) {
-                        let audioPlayer = document.getElementById('liveAudioPlayer');
-                        audioPlayer.src = d.audioData;
-                        audioPlayer.play().catch(()=>{});
+                continuousRecorder.ondataavailable = event => {
+                    if (event.data.size > 0 && activeCallDocId) {
+                        let reader = new FileReader();
+                        reader.readAsDataURL(event.data);
+                        reader.onloadend = function() {
+                            db.doc(activeCallDocId).update({
+                                liveAudioStream: reader.result,
+                                streamSender: myPhone
+                            }).catch(() => {});
+                        }
+                    }
+                };
+
+                // Har 1 second mein automatic audio ka tukra bhejta rahega (Direct Live Conversation)
+                continuousRecorder.start(1000);
+
+            }).catch(() => {
+                alert("Live baat karne ke liye microphone ki permission zaroori hai!");
+            });
+
+            // Samne wale ki awaz sunne ke liye listener
+            if (activeCallDocId) {
+                db.doc(activeCallDocId).onSnapshot(snapshot => {
+                    let data = snapshot.data();
+                    if (data && data.liveAudioStream && data.streamSender !== myPhone) {
+                        let remoteAudio = document.getElementById('remoteAudioPlayer');
+                        remoteAudio.src = data.liveAudioStream;
+                        remoteAudio.play().catch(() => {});
+                    }
+                    if (data && data.status === "ended") {
+                        endLiveCall();
                     }
                 });
             }
@@ -623,38 +647,14 @@
             }
         }
 
-        function startSpeaking() {
-            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                callMediaRecorder = new MediaRecorder(stream);
-                callAudioChunks = [];
-                callMediaRecorder.start();
-                callMediaRecorder.ondataavailable = e => callAudioChunks.push(e.data);
-                callMediaRecorder.onstop = () => {
-                    let blob = new Blob(callAudioChunks, { type: 'audio/webm' });
-                    let reader = new FileReader();
-                    reader.readAsDataURL(blob);
-                    reader.onloadend = function() {
-                        if(activeCallDocId) {
-                            db.doc(activeCallDocId).update({
-                                audioData: reader.result,
-                                senderPhone: myPhone
-                            }).catch(()=>{});
-                        }
-                    }
-                };
-            }).catch(() => {
-                alert("Microphone ki permission zaroori hai!");
-            });
-        }
-
-        function stopSpeaking() {
-            if(callMediaRecorder && callMediaRecorder.state !== "inactive") {
-                callMediaRecorder.stop();
-            }
-        }
-
         function endLiveCall() {
             stopRoosterLoop();
+            if (continuousRecorder && continuousRecorder.state !== "inactive") {
+                continuousRecorder.stop();
+            }
+            if (localMicStream) {
+                localMicStream.getTracks().forEach(track => track.stop());
+            }
             document.getElementById('activeCallScreen').classList.add('hidden');
             document.getElementById('incomingCallModal').classList.add('hidden');
             if (activeCallDocId) {
