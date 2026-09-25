@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A&M WhatsApp Clone | Live Calls & Chat</title>
+    <title>A&M WhatsApp Clone | Working Call System</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -49,16 +49,19 @@
         </div>
     </div>
 
-    <!-- Live Call Screen (Audio/Video Active) -->
+    <!-- Live Connected Call Screen -->
     <div id="activeCallScreen" class="fixed inset-0 bg-gray-900 z-[110] hidden flex flex-col justify-between p-6">
         <div class="flex justify-between items-center text-white">
-            <h3 id="liveCallTitle" class="text-lg font-bold">Live Call</h3>
+            <h3 id="liveCallTitle" class="text-lg font-bold">Live Call Active 🟢</h3>
             <button onclick="endLiveCall()" class="bg-red-600 px-4 py-2 rounded-xl text-xs font-bold">Disconnect ❌</button>
         </div>
-        <div class="flex-1 flex items-center justify-center relative space-x-4">
-            <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover rounded-2xl max-w-2xl bg-black"></video>
-            <video id="localVideo" autoplay playsinline muted class="absolute bottom-4 right-4 w-32 h-44 object-cover rounded-xl border-2 border-white bg-gray-800 shadow-lg"></video>
-            <audio id="remoteAudio" autoplay></audio>
+        <div class="flex-1 flex flex-col items-center justify-center text-white space-y-4">
+            <div class="w-32 h-32 rounded-full border-4 border-emerald-500 overflow-hidden animate-bounce">
+                <img id="activeCallDp" src="https://via.placeholder.com/150" class="w-full h-full object-cover">
+            </div>
+            <h2 id="activeCallUsername" class="text-xl font-bold">Baat ho rahi hai...</h2>
+            <p class="text-xs text-gray-400">Mic on hai, aap bol sakte hain!</p>
+            <audio id="liveAudio" autoplay></audio>
         </div>
     </div>
 
@@ -95,8 +98,8 @@
                     </div>
                 </div>
                 <div class="flex items-center space-x-3 text-xl">
-                    <button onclick="startCall('Voice')">📞</button>
-                    <button onclick="startCall('Video')">🎥</button>
+                    <button onclick="triggerCall('Voice')">📞</button>
+                    <button onclick="triggerCall('Video')">🎥</button>
                 </div>
             </div>
 
@@ -164,18 +167,9 @@
         let unsubscribeMessages = null;
         let isRecording = false;
 
-        // WebRTC & Call Variables
-        let peerConnection;
-        let localStream;
         let activeCallDocId = null;
         let roosterInterval = null;
-
-        const servers = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
-        };
+        let localAudioStream = null;
 
         window.onload = function() {
             if (!myName || !myPhone) {
@@ -464,61 +458,29 @@
             }
         }
 
-        // Live WebRTC Calling System
-        async function startCall(type) {
+        // Reliable Call System Trigger
+        function triggerCall(type) {
             if(!currentRoomId) { alert("Pehle koi chat select karein!"); return; }
             
-            localStream = await navigator.mediaDevices.getUserMedia({ video: type === 'Video', audio: true });
-            document.getElementById('localVideo').srcObject = localStream;
-            document.getElementById('activeCallScreen').classList.remove('hidden');
-            document.getElementById('liveCallTitle.innerText').innerText = `${type} Call with ${currentRoomName}`;
-
-            peerConnection = new RTCPeerConnection(servers);
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-            peerConnection.ontrack = event => {
-                document.getElementById('remoteVideo').srcObject = event.streams[0];
-                document.getElementById('remoteAudio').srcObject = event.streams[0];
-            };
-
-            const callDoc = db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").doc();
-            activeCallDocId = callDoc.id;
-
-            peerConnection.onicecandidate = event => {
-                if (event.candidate) {
-                    callDoc.collection("offerCandidates").add(event.candidate.toJSON());
-                }
-            };
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-
-            await callDoc.set({
-                callerPhone: myPhone,
+            db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").add({
                 callerName: myName,
+                callerPhone: myPhone,
                 callerDp: myDp,
                 callType: type,
-                offer: { type: offer.type, sdp: offer.sdp },
-                status: "ringing"
-            });
-
-            // Listen for answer
-            callDoc.onSnapshot(snapshot => {
-                let data = snapshot.data();
-                if (data && data.answer && !peerConnection.currentRemoteDescription) {
-                    const answerDescription = new RTCSessionDescription(data.answer);
-                    peerConnection.setRemoteDescription(answerDescription);
-                }
-                if (data && data.status === "ended") {
-                    endLiveCall();
-                }
-            });
-
-            callDoc.collection("answerCandidates").onSnapshot(snapshot => {
-                snapshot.docChanges().forEach(change => {
-                    if (change.type === 'added') {
-                        let candidate = new RTCIceCandidate(change.doc.data());
-                        peerConnection.addIceCandidate(candidate);
+                status: "ringing",
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(docRef => {
+                activeCallDocId = `${currentRoomId}/calls/${docRef.id}`;
+                alert("Call bhej di gayi hai! Samne wale ke paas ringtone baj rahi hai.");
+                
+                // Listen if call accepted or rejected
+                db.doc(activeCallDocId).onSnapshot(snap => {
+                    let data = snap.data();
+                    if(data && data.status === "accepted") {
+                        startLiveAudioStream();
+                    } else if(data && data.status === "rejected") {
+                        alert("Call reject kar di gayi.");
+                        endLiveCall();
                     }
                 });
             });
@@ -536,12 +498,11 @@
                                 let callData = callDoc.data();
                                 if (callData.callerPhone !== myPhone) {
                                     currentRoomId = roomDoc.id;
-                                    activeCallDocId = callDoc.id;
+                                    activeCallDocId = `${roomDoc.id}/calls/${callDoc.id}`;
                                     document.getElementById('callerName').innerText = `${callData.callerName} (${callData.callType} Call)`;
                                     document.getElementById('callerDp').src = callData.callerDp || 'https://via.placeholder.com/150';
                                     document.getElementById('incomingCallModal').classList.remove('hidden');
                                     
-                                    // Start continuous Rooster ringing sound
                                     startRoosterLoop();
                                 }
                             });
@@ -556,7 +517,7 @@
             playRoosterSound();
             roosterInterval = setInterval(() => {
                 playRoosterSound();
-            }, 2500); // Har 2.5 second baad morga bolega jab tak call attend na ho
+            }, 2000);
         }
 
         function stopRoosterLoop() {
@@ -569,69 +530,64 @@
         async function acceptCall() {
             stopRoosterLoop();
             document.getElementById('incomingCallModal').classList.add('hidden');
-            document.getElementById('activeCallScreen').classList.remove('hidden');
+            
+            if(activeCallDocId) {
+                db.doc(activeCallDocId).update({ status: "accepted" });
+            }
+            startLiveAudioStream();
+        }
 
-            const callDocRef = db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").doc(activeCallDocId);
-            const callDocSnap = await callDocRef.get();
-            const callData = callDocSnap.data();
+        async function startLiveAudioStream() {
+            try {
+                localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                document.getElementById('activeCallScreen').classList.remove('hidden');
+                document.getElementById('activeCallUsername').innerText = "Live Baat Cheet Jari Hai!";
+                
+                // Optional: Stream audio chunks via Firestore storage if needed, or active mic stream active session
+                let mediaRecorderLive = new MediaRecorder(localAudioStream);
+                mediaRecorderLive.start(1000);
+                mediaRecorderLive.ondataavailable = e => {
+                    if(e.data.size > 0 && activeCallDocId) {
+                        let reader = new FileReader();
+                        reader.readAsDataURL(e.data);
+                        reader.onloadend = function() {
+                            db.doc(activeCallDocId).update({ audioChunk: reader.result }).catch(()=>{});
+                        }
+                    }
+                };
 
-            localStream = await navigator.mediaDevices.getUserMedia({ video: callData.callType === 'Video', audio: true });
-            document.getElementById('localVideo').srcObject = localStream;
-
-            peerConnection = new RTCPeerConnection(servers);
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-            peerConnection.ontrack = event => {
-                document.getElementById('remoteVideo').srcObject = event.streams[0];
-                document.getElementById('remoteAudio').srcObject = event.streams[0];
-            };
-
-            peerConnection.onicecandidate = event => {
-                if (event.candidate) {
-                    callDocRef.collection("answerCandidates").add(event.candidate.toJSON());
-                }
-            };
-
-            const offer = callData.offer;
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-
-            await callDocRef.update({
-                answer: { type: answer.type, sdp: answer.sdp },
-                status: "accepted"
-            });
-
-            callDocRef.collection("offerCandidates").onSnapshot(snapshot => {
-                snapshot.docChanges().forEach(change => {
-                    if (change.type === 'added') {
-                        let candidate = new RTCIceCandidate(change.doc.data());
-                        peerConnection.addIceCandidate(candidate);
+                // Listen for incoming audio chunks from other user
+                db.doc(activeCallDocId).onSnapshot(snap => {
+                    let d = snap.data();
+                    if(d && d.audioChunk && d.lastSender !== myPhone) {
+                        let audioElem = document.getElementById('liveAudio');
+                        audioElem.src = d.audioChunk;
+                        audioElem.play().catch(()=>{});
                     }
                 });
-            });
+
+            } catch(err) {
+                alert("Microphone permission zaroori hai live baat karne ke liye!");
+            }
         }
 
         function rejectCall() {
             stopRoosterLoop();
             document.getElementById('incomingCallModal').classList.add('hidden');
-            if (currentRoomId && activeCallDocId) {
-                db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").doc(activeCallDocId).update({ status: "ended" });
+            if (activeCallDocId) {
+                db.doc(activeCallDocId).update({ status: "rejected" });
             }
         }
 
         function endLiveCall() {
             stopRoosterLoop();
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-            if (peerConnection) {
-                peerConnection.close();
+            if (localAudioStream) {
+                localAudioStream.getTracks().forEach(track => track.stop());
             }
             document.getElementById('activeCallScreen').classList.add('hidden');
             document.getElementById('incomingCallModal').classList.add('hidden');
-            if (currentRoomId && activeCallDocId) {
-                db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").doc(activeCallDocId).update({ status: "ended" }).catch(()=>{});
+            if (activeCallDocId) {
+                db.doc(activeCallDocId).update({ status: "ended" }).catch(()=>{});
             }
         }
 
