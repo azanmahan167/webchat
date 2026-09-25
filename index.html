@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A&M WhatsApp Clone | Secure Contacts & Groups</title>
+    <title>A&M WhatsApp Clone | Live Calls & Chat</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -31,6 +31,34 @@
             <button onclick="saveProfile()" class="w-full bg-[#00a884] hover:bg-[#01755c] text-white font-bold py-2.5 rounded-xl text-sm transition shadow">
                 Save & Continue 🚀
             </button>
+        </div>
+    </div>
+
+    <!-- Incoming Call Overlay Popup -->
+    <div id="incomingCallModal" class="fixed inset-0 bg-black/80 z-[100] hidden flex flex-col items-center justify-center space-y-6">
+        <div class="w-28 h-28 rounded-full border-4 border-emerald-500 overflow-hidden animate-pulse">
+            <img id="callerDp" src="https://via.placeholder.com/150" class="w-full h-full object-cover">
+        </div>
+        <div class="text-center text-white space-y-1">
+            <h2 id="callerName" class="text-2xl font-bold">Incoming Call...</h2>
+            <p class="text-xs text-emerald-400">Kukdoo koo! Morga bol raha hai...</p>
+        </div>
+        <div class="flex space-x-6">
+            <button onclick="acceptCall()" class="bg-green-500 hover:bg-green-600 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-lg transition transform hover:scale-110">📞</button>
+            <button onclick="rejectCall()" class="bg-red-500 hover:bg-red-600 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-lg transition transform hover:scale-110">❌</button>
+        </div>
+    </div>
+
+    <!-- Live Call Screen (Audio/Video Active) -->
+    <div id="activeCallScreen" class="fixed inset-0 bg-gray-900 z-[110] hidden flex flex-col justify-between p-6">
+        <div class="flex justify-between items-center text-white">
+            <h3 id="liveCallTitle" class="text-lg font-bold">Live Call</h3>
+            <button onclick="endLiveCall()" class="bg-red-600 px-4 py-2 rounded-xl text-xs font-bold">Disconnect ❌</button>
+        </div>
+        <div class="flex-1 flex items-center justify-center relative space-x-4">
+            <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover rounded-2xl max-w-2xl bg-black"></video>
+            <video id="localVideo" autoplay playsinline muted class="absolute bottom-4 right-4 w-32 h-44 object-cover rounded-xl border-2 border-white bg-gray-800 shadow-lg"></video>
+            <audio id="remoteAudio" autoplay></audio>
         </div>
     </div>
 
@@ -67,8 +95,8 @@
                     </div>
                 </div>
                 <div class="flex items-center space-x-3 text-xl">
-                    <button onclick="triggerCall('Voice')">📞</button>
-                    <button onclick="triggerCall('Video')">🎥</button>
+                    <button onclick="startCall('Voice')">📞</button>
+                    <button onclick="startCall('Video')">🎥</button>
                 </div>
             </div>
 
@@ -136,6 +164,19 @@
         let unsubscribeMessages = null;
         let isRecording = false;
 
+        // WebRTC & Call Variables
+        let peerConnection;
+        let localStream;
+        let activeCallDocId = null;
+        let roosterInterval = null;
+
+        const servers = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
         window.onload = function() {
             if (!myName || !myPhone) {
                 document.getElementById('profileModal').classList.remove('hidden');
@@ -144,6 +185,7 @@
                 updateProfileUI();
                 registerUserInDB();
                 loadChatRooms();
+                listenForIncomingCalls();
                 if (currentRoomId) openRoom(currentRoomId, currentRoomName);
             }
         };
@@ -195,6 +237,7 @@
             updateProfileUI();
             registerUserInDB();
             loadChatRooms();
+            listenForIncomingCalls();
         }
 
         function registerUserInDB() {
@@ -208,10 +251,6 @@
 
         function openProfileModal() { document.getElementById('profileModal').classList.remove('hidden'); }
 
-        // Contact verification & adding
-        function openAddContactModal() { document.getElementById('addContactModal').classList.remove('hidden'); }
-        function closeAddContactModal() { document.getElementById('addContactModal').classList.add('hidden'); }
-
         function verifyAndAddContact() {
             let phone = document.getElementById('contactPhoneInput').value.trim();
             if (phone.length !== 11) {
@@ -223,7 +262,6 @@
                 return;
             }
 
-            // Check if user exists in registered database
             db.collection("whatsapp_users").doc(phone).get().then(doc => {
                 if (!doc.exists) {
                     alert("Yeh number is app par registered nahi hai!");
@@ -231,14 +269,12 @@
                 }
                 let userData = doc.data();
 
-                // Check if already added
                 db.collection("whatsapp_contacts").where("ownerPhone", "==", myPhone).where("contactPhone", "==", phone).get().then(snapshot => {
                     if (!snapshot.empty) {
                         alert("Yeh contact pehle se added hai!");
                         return;
                     }
 
-                    // Add to contacts and create personal chat room
                     db.collection("whatsapp_contacts").add({
                         ownerPhone: myPhone,
                         contactName: userData.name,
@@ -246,7 +282,6 @@
                         contactDp: userData.dp,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     }).then(() => {
-                        // Create personal room between two users
                         db.collection("whatsapp_rooms").add({
                             name: userData.name,
                             type: "personal",
@@ -263,7 +298,6 @@
             });
         }
 
-        // Group creation
         function openGroupModal() {
             let checkboxList = document.getElementById('contactsCheckboxList');
             checkboxList.innerHTML = '<p class="text-xs text-gray-500">Loading contacts...</p>';
@@ -370,7 +404,6 @@
                     let content = "";
                     if (m.type === "image") content = `<img src="${m.text}" class="w-48 rounded-lg mb-1">`;
                     else if (m.type === "audio") content = `<audio controls class="h-8 w-44"><source src="${m.text}" type="audio/webm"></audio>`;
-                    else if (m.type === "call") content = `<div class="font-semibold text-purple-700">📞 ${m.text}</div>`;
                     else content = `<div class="text-gray-800 break-words">${m.text}</div>`;
 
                     msgContainer.innerHTML += `
@@ -431,16 +464,199 @@
             }
         }
 
-        function triggerCall(type) {
+        // Live WebRTC Calling System
+        async function startCall(type) {
             if(!currentRoomId) { alert("Pehle koi chat select karein!"); return; }
-            db.collection("whatsapp_rooms").doc(currentRoomId).collection("messages").add({
-                sender: myName,
-                phone: myPhone,
-                text: `${type} Call started...`,
-                type: "call",
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            
+            localStream = await navigator.mediaDevices.getUserMedia({ video: type === 'Video', audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            document.getElementById('activeCallScreen').classList.remove('hidden');
+            document.getElementById('liveCallTitle.innerText').innerText = `${type} Call with ${currentRoomName}`;
+
+            peerConnection = new RTCPeerConnection(servers);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.ontrack = event => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+                document.getElementById('remoteAudio').srcObject = event.streams[0];
+            };
+
+            const callDoc = db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").doc();
+            activeCallDocId = callDoc.id;
+
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    callDoc.collection("offerCandidates").add(event.candidate.toJSON());
+                }
+            };
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            await callDoc.set({
+                callerPhone: myPhone,
+                callerName: myName,
+                callerDp: myDp,
+                callType: type,
+                offer: { type: offer.type, sdp: offer.sdp },
+                status: "ringing"
             });
-            alert(`${type} Call notification bhej di gayi hai!`);
+
+            // Listen for answer
+            callDoc.onSnapshot(snapshot => {
+                let data = snapshot.data();
+                if (data && data.answer && !peerConnection.currentRemoteDescription) {
+                    const answerDescription = new RTCSessionDescription(data.answer);
+                    peerConnection.setRemoteDescription(answerDescription);
+                }
+                if (data && data.status === "ended") {
+                    endLiveCall();
+                }
+            });
+
+            callDoc.collection("answerCandidates").onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        let candidate = new RTCIceCandidate(change.doc.data());
+                        peerConnection.addIceCandidate(candidate);
+                    }
+                });
+            });
+        }
+
+        function listenForIncomingCalls() {
+            db.collection("whatsapp_rooms").onSnapshot(roomSnapshot => {
+                roomSnapshot.forEach(roomDoc => {
+                    let roomData = roomDoc.data();
+                    if (roomData.members && roomData.members.includes(myPhone)) {
+                        db.collection("whatsapp_rooms").doc(roomDoc.id).collection("calls")
+                          .where("status", "==", "ringing")
+                          .onSnapshot(callSnapshot => {
+                            callSnapshot.forEach(callDoc => {
+                                let callData = callDoc.data();
+                                if (callData.callerPhone !== myPhone) {
+                                    currentRoomId = roomDoc.id;
+                                    activeCallDocId = callDoc.id;
+                                    document.getElementById('callerName').innerText = `${callData.callerName} (${callData.callType} Call)`;
+                                    document.getElementById('callerDp').src = callData.callerDp || 'https://via.placeholder.com/150';
+                                    document.getElementById('incomingCallModal').classList.remove('hidden');
+                                    
+                                    // Start continuous Rooster ringing sound
+                                    startRoosterLoop();
+                                }
+                            });
+                        });
+                    }
+                });
+            });
+        }
+
+        function startRoosterLoop() {
+            if (roosterInterval) clearInterval(roosterInterval);
+            playRoosterSound();
+            roosterInterval = setInterval(() => {
+                playRoosterSound();
+            }, 2500); // Har 2.5 second baad morga bolega jab tak call attend na ho
+        }
+
+        function stopRoosterLoop() {
+            if (roosterInterval) {
+                clearInterval(roosterInterval);
+                roosterInterval = null;
+            }
+        }
+
+        async function acceptCall() {
+            stopRoosterLoop();
+            document.getElementById('incomingCallModal').classList.add('hidden');
+            document.getElementById('activeCallScreen').classList.remove('hidden');
+
+            const callDocRef = db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").doc(activeCallDocId);
+            const callDocSnap = await callDocRef.get();
+            const callData = callDocSnap.data();
+
+            localStream = await navigator.mediaDevices.getUserMedia({ video: callData.callType === 'Video', audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+
+            peerConnection = new RTCPeerConnection(servers);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.ontrack = event => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+                document.getElementById('remoteAudio').srcObject = event.streams[0];
+            };
+
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    callDocRef.collection("answerCandidates").add(event.candidate.toJSON());
+                }
+            };
+
+            const offer = callData.offer;
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+
+            await callDocRef.update({
+                answer: { type: answer.type, sdp: answer.sdp },
+                status: "accepted"
+            });
+
+            callDocRef.collection("offerCandidates").onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        let candidate = new RTCIceCandidate(change.doc.data());
+                        peerConnection.addIceCandidate(candidate);
+                    }
+                });
+            });
+        }
+
+        function rejectCall() {
+            stopRoosterLoop();
+            document.getElementById('incomingCallModal').classList.add('hidden');
+            if (currentRoomId && activeCallDocId) {
+                db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").doc(activeCallDocId).update({ status: "ended" });
+            }
+        }
+
+        function endLiveCall() {
+            stopRoosterLoop();
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (peerConnection) {
+                peerConnection.close();
+            }
+            document.getElementById('activeCallScreen').classList.add('hidden');
+            document.getElementById('incomingCallModal').classList.add('hidden');
+            if (currentRoomId && activeCallDocId) {
+                db.collection("whatsapp_rooms").doc(currentRoomId).collection("calls").doc(activeCallDocId).update({ status: "ended" }).catch(()=>{});
+            }
+        }
+
+        function playRoosterSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(850, audioCtx.currentTime + 0.3);
+                osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.6);
+
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.7);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.7);
+            } catch(e) {
+                console.log("Audio blocked");
+            }
         }
 
         let mediaRecorder;
