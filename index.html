@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ur" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A&M WhatsApp Clone | Secure Contacts & Groups</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Poppins', sans-serif; }
+    </style>
+    <!-- Firebase Compatibility SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-[#00a884] h-screen flex flex-col justify-center items-center p-0 md:p-4">
+
+    <!-- Profile Setup Modal -->
+    <div id="profileModal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <h2 class="text-xl font-extrabold text-[#00a884] text-center">💬 Apni Profile Banayein</h2>
+            <div class="flex flex-col items-center space-y-2">
+                <div class="w-20 h-20 bg-gray-200 rounded-full overflow-hidden border-2 border-[#00a884] flex items-center justify-center">
+                    <img id="previewDp" src="https://via.placeholder.com/150" class="w-full h-full object-cover">
+                </div>
+                <input type="file" id="dpFileInput" accept="image/*" onchange="previewDpImage(event)" class="text-xs text-gray-500 w-full file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700">
+            </div>
+            <input type="text" id="setupName" placeholder="Aap ka Naam..." class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-[#00a884]">
+            <input type="tel" id="setupPhone" maxlength="11" placeholder="Phone Number (Theek 11 Digits)..." class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-[#00a884]">
+            <button onclick="saveProfile()" class="w-full bg-[#00a884] hover:bg-[#01755c] text-white font-bold py-2.5 rounded-xl text-sm transition shadow">
+                Save & Continue 🚀
+            </button>
+        </div>
+    </div>
+
+    <!-- Main WhatsApp Interface -->
+    <div class="w-full max-w-4xl bg-[#f0f2f5] h-full md:h-[94vh] rounded-none md:rounded-2xl shadow-2xl flex overflow-hidden border border-gray-300">
+        
+        <!-- Left Sidebar -->
+        <div id="sidebar" class="w-full md:w-1/3 bg-white border-r border-gray-200 flex flex-col">
+            <div class="bg-[#f0f2f5] px-4 py-3 flex items-center justify-between border-b">
+                <div class="flex items-center space-x-3 cursor-pointer" onclick="openProfileModal()">
+                    <img id="myProfilePic" src="https://via.placeholder.com/150" class="w-10 h-10 rounded-full object-cover">
+                    <span id="myProfileName" class="font-bold text-sm text-gray-800">User</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="openAddContactModal()" class="bg-gray-200 hover:bg-gray-300 px-2.5 py-1.5 rounded-lg text-xs font-bold">👤+ Add</button>
+                    <button onclick="openGroupModal()" class="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1.5 rounded-lg text-xs font-bold">👥 Group</button>
+                </div>
+            </div>
+
+            <div id="chatRoomsList" class="flex-1 overflow-y-auto divide-y divide-gray-100">
+                <!-- Chat Rooms -->
+            </div>
+        </div>
+
+        <!-- Right Side: Active Chat Window -->
+        <div id="chatWindow" class="hidden md:flex flex-1 flex-col bg-[#efeae2]">
+            <div class="bg-[#f0f2f5] px-4 py-3 flex items-center justify-between border-b">
+                <div class="flex items-center space-x-3">
+                    <button onclick="backToSidebar()" class="md:hidden text-xl font-bold mr-1">⬅️</button>
+                    <img id="activeRoomPic" src="https://via.placeholder.com/150" class="w-10 h-10 rounded-full object-cover">
+                    <div>
+                        <h2 id="activeRoomTitle" class="font-bold text-sm text-gray-800">Select a chat</h2>
+                        <p id="activeRoomStatus" class="text-[10px] text-gray-500">Online</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3 text-xl">
+                    <button onclick="triggerCall('Voice')">📞</button>
+                    <button onclick="triggerCall('Video')">🎥</button>
+                </div>
+            </div>
+
+            <div id="activeMessages" class="flex-1 p-4 overflow-y-auto space-y-3">
+                <div class="text-center text-gray-500 text-xs py-20">Koi chat select karein!</div>
+            </div>
+
+            <div class="bg-[#f0f2f5] p-3 flex items-center space-x-2 border-t">
+                <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="sendImageMessage(event)">
+                <button onclick="document.getElementById('imageInput').click()" class="text-xl px-2">📎</button>
+                <input type="text" id="messageInput" onkeypress="handleKeyPress(event)" placeholder="Type a message..." class="flex-1 px-4 py-2 bg-white rounded-lg text-xs md:text-sm focus:outline-none">
+                <button onclick="toggleVoiceRecord()" id="micBtn" class="text-xl px-2">🎤</button>
+                <button onclick="sendTextMessage()" class="bg-[#00a884] hover:bg-[#01755c] text-white px-4 py-2 rounded-lg font-bold text-xs md:text-sm transition">Send 📤</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Add Contact Modal -->
+    <div id="addContactModal" class="fixed inset-0 bg-black/70 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <h2 class="text-lg font-extrabold text-[#00a884]">Dost ka Number Add Karein</h2>
+            <input type="tel" id="contactPhoneInput" maxlength="11" placeholder="11 Digits Registered Number..." class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none">
+            <div class="flex space-x-2">
+                <button onclick="verifyAndAddContact()" class="flex-1 bg-[#00a884] text-white font-bold py-2 rounded-xl text-xs">Add</button>
+                <button onclick="closeAddContactModal()" class="flex-1 bg-gray-300 text-gray-800 font-bold py-2 rounded-xl text-xs">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div id="groupModal" class="fixed inset-0 bg-black/70 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <h2 class="text-lg font-extrabold text-[#00a884]">Naya Group Banayein</h2>
+            <input type="text" id="groupNameInput" placeholder="Group ka Naam..." class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none">
+            <p class="text-xs font-bold text-gray-700">Members select karein:</p>
+            <div id="contactsCheckboxList" class="space-y-2 max-h-48 overflow-y-auto border p-2 rounded-xl"></div>
+            <div class="flex space-x-2">
+                <button onclick="createGroupDone()" class="flex-1 bg-[#00a884] text-white font-bold py-2.5 rounded-xl text-xs">Done ✅</button>
+                <button onclick="closeGroupModal()" class="flex-1 bg-gray-300 text-gray-800 font-bold py-2.5 rounded-xl text-xs">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD02RIDSG86_ZF1Ea5hLRkceEG1RDqTUcM",
+            authDomain: "am-store-8de76.firebaseapp.com",
+            projectId: "am-store-8de76",
+            storageBucket: "am-store-8de76.firebasestorage.app",
+            messagingSenderId: "1091157278308",
+            appId: "1:1091157278308:web:24985147ea761ca2e8a971",
+            measurementId: "G-Q9NCWD7LEM"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        let myName = localStorage.getItem('wa_name') || '';
+        let myPhone = localStorage.getItem('wa_phone') || '';
+        let myDp = localStorage.getItem('wa_dp') || 'https://via.placeholder.com/150';
+        let currentRoomId = localStorage.getItem('wa_active_room') || '';
+        let currentRoomName = localStorage.getItem('wa_active_room_name') || '';
+        let unsubscribeMessages = null;
+        let isRecording = false;
+
+        window.onload = function() {
+            if (!myName || !myPhone) {
+                document.getElementById('profileModal').classList.remove('hidden');
+            } else {
+                document.getElementById('profileModal').classList.add('hidden');
+                updateProfileUI();
+                registerUserInDB();
+                loadChatRooms();
+                if (currentRoomId) openRoom(currentRoomId, currentRoomName);
+            }
+        };
+
+        function updateProfileUI() {
+            document.getElementById('myProfileName').innerText = myName;
+            document.getElementById('myProfilePic').src = myDp;
+            document.getElementById('setupName').value = myName;
+            document.getElementById('setupPhone').value = myPhone;
+            document.getElementById('previewDp').src = myDp;
+        }
+
+        let tempDpBase64 = myDp;
+        function previewDpImage(e) {
+            let file = e.target.files[0];
+            if (file) {
+                let reader = new FileReader();
+                reader.onload = function(uploadEvent) {
+                    let img = new Image();
+                    img.src = uploadEvent.target.result;
+                    img.onload = function() {
+                        let canvas = document.createElement('canvas');
+                        let ctx = canvas.getContext('2d');
+                        canvas.width = 150; canvas.height = 150;
+                        ctx.drawImage(img, 0, 0, 150, 150);
+                        tempDpBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        document.getElementById('previewDp').src = tempDpBase64;
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function saveProfile() {
+            let name = document.getElementById('setupName').value.trim();
+            let phone = document.getElementById('setupPhone').value.trim();
+            if (!name || phone.length !== 11) {
+                alert("Naam lazmi likhein aur phone number theek 11 digits ka hona chahiye!");
+                return;
+            }
+            myName = name;
+            myPhone = phone;
+            myDp = tempDpBase64;
+            localStorage.setItem('wa_name', myName);
+            localStorage.setItem('wa_phone', myPhone);
+            localStorage.setItem('wa_dp', myDp);
+
+            document.getElementById('profileModal').classList.add('hidden');
+            updateProfileUI();
+            registerUserInDB();
+            loadChatRooms();
+        }
+
+        function registerUserInDB() {
+            db.collection("whatsapp_users").doc(myPhone).set({
+                name: myName,
+                phone: myPhone,
+                dp: myDp,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+
+        function openProfileModal() { document.getElementById('profileModal').classList.remove('hidden'); }
+
+        // Contact verification & adding
+        function openAddContactModal() { document.getElementById('addContactModal').classList.remove('hidden'); }
+        function closeAddContactModal() { document.getElementById('addContactModal').classList.add('hidden'); }
+
+        function verifyAndAddContact() {
+            let phone = document.getElementById('contactPhoneInput').value.trim();
+            if (phone.length !== 11) {
+                alert("Number theek 11 digits ka hona chahiye!");
+                return;
+            }
+            if (phone === myPhone) {
+                alert("Aap apna khud ka number add nahi kar sakte!");
+                return;
+            }
+
+            // Check if user exists in registered database
+            db.collection("whatsapp_users").doc(phone).get().then(doc => {
+                if (!doc.exists) {
+                    alert("Yeh number is app par registered nahi hai!");
+                    return;
+                }
+                let userData = doc.data();
+
+                // Check if already added
+                db.collection("whatsapp_contacts").where("ownerPhone", "==", myPhone).where("contactPhone", "==", phone).get().then(snapshot => {
+                    if (!snapshot.empty) {
+                        alert("Yeh contact pehle se added hai!");
+                        return;
+                    }
+
+                    // Add to contacts and create personal chat room
+                    db.collection("whatsapp_contacts").add({
+                        ownerPhone: myPhone,
+                        contactName: userData.name,
+                        contactPhone: userData.phone,
+                        contactDp: userData.dp,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }).then(() => {
+                        // Create personal room between two users
+                        db.collection("whatsapp_rooms").add({
+                            name: userData.name,
+                            type: "personal",
+                            members: [myPhone, phone],
+                            pic: userData.dp,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }).then(() => {
+                            document.getElementById('contactPhoneInput').value = '';
+                            closeAddContactModal();
+                            alert("Contact successfully add ho gaya aur chat shuru ho gayi!");
+                        });
+                    });
+                });
+            });
+        }
+
+        // Group creation
+        function openGroupModal() {
+            let checkboxList = document.getElementById('contactsCheckboxList');
+            checkboxList.innerHTML = '<p class="text-xs text-gray-500">Loading contacts...</p>';
+            document.getElementById('groupModal').classList.remove('hidden');
+
+            db.collection("whatsapp_contacts").where("ownerPhone", "==", myPhone).get().then(snapshot => {
+                checkboxList.innerHTML = '';
+                if (snapshot.empty) {
+                    checkboxList.innerHTML = '<p class="text-xs text-red-500">Pehle kuch contacts add karein!</p>';
+                    return;
+                }
+                snapshot.forEach(doc => {
+                    let c = doc.data();
+                    checkboxList.innerHTML += `
+                        <label class="flex items-center space-x-2 text-xs text-gray-800 cursor-pointer p-1 hover:bg-gray-50 rounded">
+                            <input type="checkbox" value="${c.contactPhone}" class="group-member-checkbox rounded text-[#00a884]">
+                            <span>${c.contactName} (${c.contactPhone})</span>
+                        </label>
+                    `;
+                });
+            });
+        }
+
+        function closeGroupModal() { document.getElementById('groupModal').classList.add('hidden'); }
+
+        function createGroupDone() {
+            let groupName = document.getElementById('groupNameInput').value.trim();
+            if (!groupName) {
+                alert("Group ka naam likhein!");
+                return;
+            }
+
+            let checkboxes = document.querySelectorAll('.group-member-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert("Kam az kam ek member select karein!");
+                return;
+            }
+
+            let selectedMembers = [myPhone];
+            checkboxes.forEach(cb => selectedMembers.push(cb.value));
+
+            db.collection("whatsapp_rooms").add({
+                name: groupName,
+                type: "group",
+                members: selectedMembers,
+                pic: 'https://via.placeholder.com/150',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                document.getElementById('groupNameInput').value = '';
+                closeGroupModal();
+                alert("Group successfully ban gaya!");
+            });
+        }
+
+        function loadChatRooms() {
+            db.collection("whatsapp_rooms").onSnapshot(snapshot => {
+                let list = document.getElementById('chatRoomsList');
+                list.innerHTML = '';
+                if (snapshot.empty) {
+                    list.innerHTML = `<p class="text-center text-xs text-gray-400 py-6">Koi chat room nahi hai.</p>`;
+                    return;
+                }
+                snapshot.forEach(doc => {
+                    let room = doc.data();
+                    if (room.members && room.members.includes(myPhone)) {
+                        list.innerHTML += `
+                            <div onclick="openRoom('${doc.id}', '${room.name}')" class="flex items-center px-4 py-3 hover:bg-gray-100 cursor-pointer space-x-3 border-b">
+                                <img src="${room.pic || 'https://via.placeholder.com/150'}" class="w-12 h-12 rounded-full object-cover">
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="font-bold text-sm text-gray-900 truncate">${room.name}</h4>
+                                    <p class="text-xs text-gray-500 truncate">${room.type === 'group' ? 'Group Chat' : 'Personal Chat'}</p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+            });
+        }
+
+        function openRoom(roomId, roomName) {
+            currentRoomId = roomId;
+            currentRoomName = roomName;
+            localStorage.setItem('wa_active_room', roomId);
+            localStorage.setItem('wa_active_room_name', roomName);
+
+            document.getElementById('activeRoomTitle').innerText = roomName;
+            document.getElementById('chatWindow').classList.remove('hidden');
+            if(window.innerWidth < 768) document.getElementById('sidebar').classList.add('hidden');
+
+            if (unsubscribeMessages) unsubscribeMessages();
+
+            unsubscribeMessages = db.collection("whatsapp_rooms").doc(roomId).collection("messages").orderBy("createdAt", "asc").onSnapshot(snapshot => {
+                let msgContainer = document.getElementById('activeMessages');
+                msgContainer.innerHTML = '';
+                if (snapshot.empty) {
+                    msgContainer.innerHTML = `<p class="text-center text-gray-500 text-xs py-10">Pehla message bhejein!</p>`;
+                    return;
+                }
+                snapshot.forEach(doc => {
+                    let m = doc.data();
+                    let isMe = m.phone === myPhone;
+                    let align = isMe ? "ml-auto bg-[#d9fdd3]" : "mr-auto bg-white";
+
+                    let content = "";
+                    if (m.type === "image") content = `<img src="${m.text}" class="w-48 rounded-lg mb-1">`;
+                    else if (m.type === "audio") content = `<audio controls class="h-8 w-44"><source src="${m.text}" type="audio/webm"></audio>`;
+                    else if (m.type === "call") content = `<div class="font-semibold text-purple-700">📞 ${m.text}</div>`;
+                    else content = `<div class="text-gray-800 break-words">${m.text}</div>`;
+
+                    msgContainer.innerHTML += `
+                        <div class="max-w-[75%] md:max-w-[60%] p-2.5 rounded-xl shadow-sm text-xs md:text-sm ${align} space-y-1">
+                            <div class="font-bold text-[10px] text-emerald-800">${isMe ? 'Aap' : m.sender}</div>
+                            ${content}
+                        </div>
+                    `;
+                });
+                msgContainer.scrollTop = msgContainer.scrollHeight;
+            });
+        }
+
+        function backToSidebar() {
+            document.getElementById('chatWindow').classList.add('hidden');
+            document.getElementById('sidebar').classList.remove('hidden');
+        }
+
+        function handleKeyPress(e) { if(e.key === 'Enter') sendTextMessage(); }
+
+        function sendTextMessage() {
+            let input = document.getElementById('messageInput');
+            let text = input.value.trim();
+            if(!text || !currentRoomId) return;
+
+            db.collection("whatsapp_rooms").doc(currentRoomId).collection("messages").add({
+                sender: myName,
+                phone: myPhone,
+                text: text,
+                type: "text",
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => { input.value = ''; });
+        }
+
+        function sendImageMessage(e) {
+            let file = e.target.files[0];
+            if(!file || !currentRoomId) return;
+            let reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = function() {
+                let img = new Image();
+                img.src = reader.result;
+                img.onload = function() {
+                    let canvas = document.createElement('canvas');
+                    let ctx = canvas.getContext('2d');
+                    canvas.width = 400; canvas.height = 400;
+                    ctx.drawImage(img, 0, 0, 400, 400);
+                    let compressed = canvas.toDataURL('image/jpeg', 0.6);
+
+                    db.collection("whatsapp_rooms").doc(currentRoomId).collection("messages").add({
+                        sender: myName,
+                        phone: myPhone,
+                        text: compressed,
+                        type: "image",
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+            }
+        }
+
+        function triggerCall(type) {
+            if(!currentRoomId) { alert("Pehle koi chat select karein!"); return; }
+            db.collection("whatsapp_rooms").doc(currentRoomId).collection("messages").add({
+                sender: myName,
+                phone: myPhone,
+                text: `${type} Call started...`,
+                type: "call",
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            alert(`${type} Call notification bhej di gayi hai!`);
+        }
+
+        let mediaRecorder;
+        let audioChunks = [];
+        function toggleVoiceRecord() {
+            if(!currentRoomId) { alert("Pehle koi chat select karein!"); return; }
+            let micBtn = document.getElementById('micBtn');
+            if(!isRecording) {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.start();
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        let blob = new Blob(audioChunks, { type: 'audio/webm' });
+                        let reader = new FileReader();
+                        reader.readAsDataURL(blob);
+                        reader.onloadend = function() {
+                            db.collection("whatsapp_rooms").doc(currentRoomId).collection("messages").add({
+                                sender: myName,
+                                phone: myPhone,
+                                text: reader.result,
+                                type: "audio",
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+                        }
+                    };
+                    isRecording = true;
+                    micBtn.style.color = "red";
+                });
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                micBtn.style.color = "black";
+            }
+        }
+    </script>
+</body>
+</html>
